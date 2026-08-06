@@ -1,0 +1,18 @@
+[project]
+name = "sparse-search-models-test"
+version = "0.1.0"
+description = "Benchmark of sparse retrieval encoders (BM25, TF-IDF, SPLADE, OpenSearch EN, OpenSearch multilingual, BGE-M3) on English/Korean OEM manual text."
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-learn",
+    "rank-bm25",
+    "torch",
+    "transformers",
+    "huggingface-hub",
+]
+[dependency-groups]
+dev = [
+    "ruff==0.16.1",
+]
