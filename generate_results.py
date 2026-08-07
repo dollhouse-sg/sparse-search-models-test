@@ -26,29 +26,19 @@ N_TERMS = 10
 
 
 def load_corpus() -> list[dict]:
-    """Load corpus.json and flag which chunks have a Korean parallel."""
+    """Load corpus.json. Every chunk has an English and a Korean parallel."""
     corpus = json.loads((ROOT / "corpus.json").read_text(encoding="utf-8"))
-    return [{**c, "parallel": c["text_ko"] is not None} for c in corpus["chunks"]]
+    return corpus["chunks"]
 
 
 CONDITIONS = [
     {
         "key": "full_en",
-        "label": "English → English (full corpus)",
-        "short": "EN → EN (120)",
+        "label": "English → English",
+        "short": "EN → EN",
         "doc_lang": "en",
         "query_lang": "en",
-        "subset": "all",
-        "description": "All 120 chunks. The realistic monolingual baseline and the only condition with a full-size candidate pool.",
-    },
-    {
-        "key": "par_en_en",
-        "label": "English → English (parallel subset)",
-        "short": "EN → EN (40)",
-        "doc_lang": "en",
-        "query_lang": "en",
-        "subset": "parallel",
-        "description": "The 40 chunks that exist in both languages. This is the control for the three cross-lingual conditions.",
+        "description": "All 120 chunks. The monolingual baseline the cross-lingual conditions are compared against.",
     },
     {
         "key": "par_ko_ko",
@@ -56,7 +46,6 @@ CONDITIONS = [
         "short": "KO → KO",
         "doc_lang": "ko",
         "query_lang": "ko",
-        "subset": "parallel",
         "description": "Korean queries against Korean manual text. Monolingual, but tests whether each model handles Korean at all.",
     },
     {
@@ -65,7 +54,6 @@ CONDITIONS = [
         "short": "EN → KO",
         "doc_lang": "ko",
         "query_lang": "en",
-        "subset": "parallel",
         "description": "English query, Korean documents. Matching can only happen through shared identifiers or genuine multilingual representation.",
     },
     {
@@ -74,7 +62,6 @@ CONDITIONS = [
         "short": "KO → EN",
         "doc_lang": "en",
         "query_lang": "ko",
-        "subset": "parallel",
         "description": "Korean query, English documents. The reverse direction, which is the common case for a Korean operator searching English OEM docs.",
     },
 ]
@@ -149,7 +136,6 @@ def summarise(
         "by_tier": {
             t: hit_where([x == t for x in tiers]) for t in ("easy", "medium", "hard")
         },
-        # Only the parallel chunks are annotated, so full_en covers a subset.
         "by_identifier": {
             g: hit_where([x == g for x in idgroups]) for g in ("with_ids", "prose_only")
         },
@@ -183,8 +169,7 @@ def model_meta(enc: Encoder, error: str | None = None) -> dict[str, Any]:
 def main() -> int:
     """Load every model, run every condition, and write results.json."""
     chunks = load_corpus()
-    parallel = [c for c in chunks if c["parallel"]]
-    print(f"corpus: {len(chunks)} chunks, {len(parallel)} with Korean parallel text")
+    print(f"corpus: {len(chunks)} chunks")
 
     # Load up front so an unreachable checkpoint is reported once, not per condition.
     meta: list[dict] = []
@@ -203,20 +188,13 @@ def main() -> int:
 
     conditions_out = []
     for cond in CONDITIONS:
-        pool = parallel if cond["subset"] == "parallel" else chunks
-        ids = [c["id"] for c in pool]
-        docs = [c["text_ko"] if cond["doc_lang"] == "ko" else c["text"] for c in pool]
+        ids = [c["id"] for c in chunks]
+        docs = [c["text_ko"] if cond["doc_lang"] == "ko" else c["text"] for c in chunks]
         queries = [
-            c["query_ko"] if cond["query_lang"] == "ko" else c["query"] for c in pool
+            c["query_ko"] if cond["query_lang"] == "ko" else c["query"] for c in chunks
         ]
-        tiers = [c["tier"] for c in pool]
-        # identifiers=null means unreviewed, which is not the same as having none.
-        idgroups = [
-            ("with_ids" if c["identifiers"] else "prose_only")
-            if c["identifiers"] is not None
-            else "unannotated"
-            for c in pool
-        ]
+        tiers = [c["tier"] for c in chunks]
+        idgroups = ["with_ids" if c["identifiers"] else "prose_only" for c in chunks]
 
         print(f"\n=== {cond['label']}  ({len(docs)} docs) ===", flush=True)
         metrics: dict[str, Any] = {}
@@ -227,10 +205,10 @@ def main() -> int:
                 "tier": c["tier"],
                 "vendor": c["vendor"],
                 "bucket": c["bucket"],
-                "identifiers": c["identifiers"] or [],
+                "identifiers": c["identifiers"],
                 "per_model": {},
             }
-            for c, q in zip(pool, queries)
+            for c, q in zip(chunks, queries)
         ]
 
         for enc in live:
@@ -305,7 +283,6 @@ def main() -> int:
                     "text_ko",
                     "query_ko",
                     "identifiers",
-                    "parallel",
                 )
             }
             for c in chunks
